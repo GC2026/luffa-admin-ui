@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luffa Wallet - 资产白名单管理系统</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'spin-slow': 'spin 2s linear infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: 0, transform: 'translateY(15px)' },
+                            '100%': { opacity: 1, transform: 'translateY(0)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        .toast-enter-active, .toast-leave-active {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .toast-enter-from {
+            opacity: 0;
+            transform: translate(-50%, -20px) scale(0.95);
+        }
+        .toast-leave-to {
+            opacity: 0;
+            transform: translate(-50%, -20px) scale(0.95);
+        }
+        
+        .list-enter-active, .list-leave-active {
+            transition: all 0.3s ease;
+        }
+        .list-enter-from, .list-leave-to {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+        
+        /* 隐藏滚动条但保持可滚动 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-800 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900">
+    <div id="app" class="min-h-screen flex flex-col relative overflow-hidden">
+        
+        <div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-500/5 blur-[120px] pointer-events-none z-0"></div>
+        <div class="fixed bottom-[-10%] right-[-10%] w-[30%] h-[40%] rounded-full bg-blue-500/5 blur-[100px] pointer-events-none z-0"></div>
+
+        <header class="bg-white/70 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-20 transition-all">
+            <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+                <div class="flex items-center gap-3 text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">
+                    <i class="ph-fill ph-shield-check text-2xl text-blue-600"></i>
+                    Luffa Admin
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2 w-2 relative">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-xs font-medium text-slate-500">Env:</span>
+                    <span class="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2.5 py-1 rounded-md border border-slate-200">{{ apiBaseUrl }}</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
+            
+            <div class="lg:col-span-4 space-y-6">
+                
+                <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 opacity-0 animate-fade-in-up hover:shadow-2xl hover:shadow-slate-200/50 transition-shadow duration-300">
+                    <h2 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-800">
+                        <div class="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+                            <i class="ph ph-plus-circle text-xl leading-none"></i>
+                        </div>
+                        添加代币至白名单
+                    </h2>
+                    
+                    <div class="space-y-5">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1.5">选择主链</label>
+                            <div class="relative">
+                                <select v-model="form.chainId" class="w-full appearance-none border border-slate-200 rounded-xl shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 bg-slate-50 hover:bg-slate-100/50 p-3 pr-10 transition-all text-sm font-medium outline-none cursor-pointer">
+                                    <option v-for="chain in chains" :key="chain.id" :value="chain.id">
+                                        {{ chain.name }} (ID: {{ chain.id }})
+                                    </option>
+                                </select>
+                                <i class="ph ph-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1.5">代币合约地址</label>
+                            <div class="relative">
+                                <input v-model="form.address" type="text" placeholder="0x..." 
+                                    class="w-full border border-slate-200 rounded-xl shadow-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 bg-slate-50 focus:bg-white p-3 transition-all font-mono text-sm outline-none placeholder-slate-300">
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-2 flex items-center gap-1">
+                                <i class="ph ph-info text-slate-400"></i> 系统会自动去除首尾空格并转换为小写
+                            </p>
+                        </div>
+
+                        <button @click="handleAddToken" :disabled="loading.add || !form.address"
+                            class="group relative w-full flex justify-center items-center gap-2 py-3 px-4 rounded-xl text-white font-semibold transition-all duration-200
+                                   bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 hover:-translate-y-0.5 active:scale-[0.98]
+                                   disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-blue-500/30">
+                            <i v-if="loading.add" class="ph ph-spinner-gap animate-spin text-lg"></i>
+                            <i v-else class="ph ph-paper-plane-tilt text-lg group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"></i>
+                            {{ loading.add ? '正在写入...' : '确认添加' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 opacity-0 animate-fade-in-up" style="animation-delay: 0.1s;">
+                    <h2 class="text-lg font-bold mb-5 flex items-center gap-2 text-slate-800">
+                        <div class="p-1.5 rounded-lg bg-purple-50 text-purple-600">
+                            <i class="ph ph-magnifying-glass text-xl leading-none"></i>
+                        </div>
+                        验证代币状态
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div class="relative">
+                            <input v-model="checkForm.address" type="text" placeholder="粘贴地址进行验证..." 
+                                class="w-full border border-slate-200 rounded-xl shadow-sm focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 bg-slate-50 focus:bg-white p-3 pr-10 transition-all font-mono text-sm outline-none placeholder-slate-300">
+                            <button v-if="checkForm.address" @click="checkForm.address = ''; checkResult = null" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors">
+                                <i class="ph-fill ph-x-circle text-lg"></i>
+                            </button>
+                        </div>
+                        <button @click="handleCheckToken" :disabled="loading.check || !checkForm.address"
+                            class="w-full flex justify-center items-center gap-2 py-2.5 px-4 rounded-xl text-purple-700 font-semibold transition-all duration-200
+                                   bg-purple-50 hover:bg-purple-100 border border-purple-100 active:scale-[0.98]
+                                   disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i v-if="loading.check" class="ph ph-spinner-gap animate-spin text-lg"></i>
+                            查询白名单库
+                        </button>
+
+                        <transition name="list">
+                            <div v-if="checkResult !== null" class="mt-4 p-3.5 rounded-xl border text-sm font-medium flex items-center gap-2.5"
+                                 :class="checkResult ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-rose-50 border-rose-100 text-rose-700'">
+                                <div class="p-1 rounded-full bg-white shadow-sm">
+                                    <i :class="checkResult ? 'ph-fill ph-check-circle text-emerald-500 text-lg' : 'ph-fill ph-warning-circle text-rose-500 text-lg'"></i>
+                                </div>
+                                {{ checkResult ? '已安全收录：该代币允许放行' : '风险拦截：未知代币' }}
+                            </div>
+                        </transition>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 opacity-0 animate-fade-in-up" style="animation-delay: 0.2s;">
+                <div class="bg-white rounded-2xl shadow-xl shadow-slate-200/40 border border-slate-100 flex flex-col h-[750px] overflow-hidden relative">
+                    
+                    <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white z-10 relative">
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-800">
+                            <div class="p-1.5 rounded-lg bg-slate-50 text-slate-500">
+                                <i class="ph ph-list-dashes text-xl leading-none"></i>
+                            </div>
+                            库内名单概览
+                        </h2>
+                        
+                        <div class="flex items-center gap-3">
+                            <div class="relative">
+                                <select v-model="listChainId" @change="fetchList" class="appearance-none border border-slate-200 rounded-lg text-sm font-medium py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-slate-100 focus:border-slate-300 bg-slate-50 hover:bg-slate-100 outline-none cursor-pointer transition-colors">
+                                    <option v-for="chain in chains" :key="chain.id" :value="chain.id">
+                                        {{ chain.name }}
+                                    </option>
+                                </select>
+                                <i class="ph ph-caret-down absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-xs"></i>
+                            </div>
+                            
+                            <button @click="fetchList" class="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all active:scale-95" title="刷新列表">
+                                <i class="ph ph-arrows-clockwise text-lg" :class="{'animate-spin': loading.list}"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-auto no-scrollbar relative bg-slate-50/30">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="sticky top-0 bg-white/80 backdrop-blur-md text-xs uppercase text-slate-500 font-semibold border-b border-slate-100 z-10 shadow-sm shadow-slate-100/50">
+                                <tr>
+                                    <th class="px-6 py-4 w-24 text-center">#</th>
+                                    <th class="px-6 py-4">Contract Address</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100/80">
+                                <tr v-if="loading.list" v-for="i in 5" :key="'skel'+i">
+                                    <td class="px-6 py-4 text-center"><div class="h-4 bg-slate-200 rounded animate-pulse w-8 mx-auto"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded animate-pulse w-2/3"></div></td>
+                                </tr>
+                                
+                                <tr v-else-if="whitelist.length === 0">
+                                    <td colspan="2" class="px-6 py-16 text-center">
+                                        <div class="flex flex-col items-center justify-center text-slate-400">
+                                            <i class="ph-fill ph-ghost text-4xl mb-3 text-slate-300"></i>
+                                            <p>当前链暂未收录任何白名单数据</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                
+                                <transition-group name="list" v-else>
+                                    <tr v-for="(address, index) in whitelist" :key="address" class="group hover:bg-blue-50/50 transition-colors">
+                                        <td class="px-6 py-3.5 text-center text-slate-400 font-medium group-hover:text-blue-500 transition-colors">{{ index + 1 }}</td>
+                                        <td class="px-6 py-3.5">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                    <i class="ph ph-file-code text-xs"></i>
+                                                </div>
+                                                <span class="font-mono text-slate-600 group-hover:text-slate-800 transition-colors tracking-tight">{{ address }}</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </transition-group>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="p-4 border-t border-slate-100 bg-white text-xs font-medium text-slate-400 flex justify-between items-center z-10">
+                        <span class="flex items-center gap-1.5">
+                            <i class="ph-fill ph-check-circle text-emerald-500"></i>
+                            系统实时防护中
+                        </span>
+                        <span class="bg-slate-100 px-2 py-1 rounded-md text-slate-600">Total: {{ whitelist.length }} assets</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <transition name="toast">
+            <div v-if="toast.show" class="fixed top-6 left-1/2 z-50 px-5 py-3.5 rounded-xl shadow-2xl font-medium flex items-center gap-3 border"
+                 :class="toast.type === 'success' ? 'bg-white border-emerald-100 text-emerald-700 shadow-emerald-500/10' : 'bg-white border-rose-100 text-rose-700 shadow-rose-500/10'">
+                <div class="p-1 rounded-full" :class="toast.type === 'success' ? 'bg-emerald-100' : 'bg-rose-100'">
+                    <i :class="toast.type === 'success' ? 'ph-fill ph-check-circle text-emerald-600 text-xl' : 'ph-fill ph-warning-circle text-rose-600 text-xl'"></i>
+                </div>
+                {{ toast.message }}
+            </div>
+        </transition>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const apiBaseUrl = 'https://api-wallet-test.endless.link/api';
+                const authHeaders = {
+                    'sign': '!Qh~X>iGT+#>f)M3XDdF'
+                };
+
+                const request = axios.create({
+                    baseURL: apiBaseUrl,
+                    headers: authHeaders
+                });
+
+                // ================= 状态区 =================
+                const chains = [
+                    { id: '56', name: 'BSC (BNB Chain)' },
+                    { id: '1', name: 'Ethereum' },
+                    { id: '8453', name: 'Base' },
+                    { id: '501000001', name: 'Solana' },
+                    { id: '195', name: 'Tron' }
+                ];
+
+                const form = ref({ chainId: '56', address: '' });
+                const checkForm = ref({ address: '' });
+                const listChainId = ref('56');
+                const whitelist = ref([]);
+                const checkResult = ref(null);
+                
+                const loading = ref({ add: false, list: false, check: false });
+                const toast = ref({ show: false, message: '', type: 'success' });
+
+                // ================= 方法区 =================
+                const showToast = (message, type = 'success') => {
+                    toast.value = { show: true, message, type };
+                    setTimeout(() => { toast.value.show = false; }, 3000);
+                };
+
+                const fetchList = async () => {
+                    loading.value.list = true;
+                    try {
+                        const res = await request.get(`/notification/whitelist/list?chain_id=${listChainId.value}`);
+                        if (res.data.code === "0" || res.data.code === "200" || res.data.code === "success") {
+                            whitelist.value = res.data.data || [];
+                        } else {
+                            throw new Error(res.data.msg || "获取列表失败");
+                        }
+                    } catch (error) {
+                        showToast(error.message || "网络请求失败", 'error');
+                        whitelist.value = [];
+                    } finally {
+                        loading.value.list = false;
+                    }
+                };
+
+                const handleAddToken = async () => {
+                    if (!form.value.address) return;
+                    loading.value.add = true;
+
+                    let cleanAddress = form.value.address.trim();
+                    if (['1', '56', '8453'].includes(form.value.chainId)) {
+                        cleanAddress = cleanAddress.toLowerCase();
+                    }
+
+                    try {
+                        const res = await request.post(`/notification/whitelist/add`, {
+                            chain_id: form.value.chainId,
+                            token_address: cleanAddress
+                        });
+
+                        if (res.data.code === "0" || res.data.code === "200" || res.data.code === "success") {
+                            showToast("添加成功！");
+                            form.value.address = '';
+                            if (listChainId.value === form.value.chainId) {
+                                fetchList();
+                            }
+                        } else {
+                            throw new Error(res.data.msg || "添加失败");
+                        }
+                    } catch (error) {
+                        showToast(error.message || "请求失败，请检查网络或权限", 'error');
+                    } finally {
+                        loading.value.add = false;
+                    }
+                };
+
+                const handleCheckToken = async () => {
+                    if (!checkForm.value.address) return;
+                    loading.value.check = true;
+                    checkResult.value = null;
+
+                    let cleanAddress = checkForm.value.address.trim();
+                    if (['1', '56', '8453'].includes(form.value.chainId)) {
+                        cleanAddress = cleanAddress.toLowerCase();
+                    }
+
+                    try {
+                        const res = await request.get(`/notification/whitelist/check`, {
+                            params: { chain_id: form.value.chainId, token_address: cleanAddress }
+                        });
+                        if (res.data.code === "0" || res.data.code === "200" || res.data.code === "success") {
+                            checkResult.value = res.data.data.is_whitelisted;
+                        } else {
+                            throw new Error(res.data.msg);
+                        }
+                    } catch (error) {
+                        showToast(error.message || "查询失败", 'error');
+                    } finally {
+                        loading.value.check = false;
+                    }
+                };
+
+                onMounted(() => {
+                    fetchList();
+                });
+
+                return {
+                    apiBaseUrl, chains, form, checkForm, listChainId,
+                    whitelist, checkResult, loading, toast,
+                    fetchList, handleAddToken, handleCheckToken
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
